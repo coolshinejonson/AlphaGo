@@ -1,73 +1,90 @@
 from AlphaGo.go import GameState
+import AlphaGo.go as go
 import numpy as np
 import unittest
 
-class TestSymmetries(unittest.TestCase):
+class TestKo(unittest.TestCase):
 
-	def setUp(self):
-		self.s = GameState()
-		self.s.do_move((4,5))
-		self.s.do_move((5,5))
-		self.s.do_move((5,6))
+	def test_standard_ko(self):
+		gs = GameState(size=9)
+		gs.do_move((1,0)) # B
+		gs.do_move((2,0)) # W
+		gs.do_move((0,1)) # B
+		gs.do_move((3,1)) # W
+		gs.do_move((1,2)) # B
+		gs.do_move((2,2)) # W
+		gs.do_move((2,1)) # B
+		
+		gs.do_move((1,1)) # W trigger capture and ko
 
-		self.syms = self.s.symmetries()
+		self.assertEqual(gs.num_black_prisoners, 1)
+		self.assertEqual(gs.num_white_prisoners, 0)
 
-	def test_num_syms(self):
-		# make sure we got exactly 8 back
-		self.assertEqual(len(self.syms), 8)
+		self.assertFalse(gs.is_legal((2,1)))
 
-	def test_copy_fields(self):
-		# make sure each copy has the correct non-board fields
-		for copy in self.syms:
-			self.assertEqual(self.s.size, copy.size)
-			self.assertEqual(self.s.turns_played, copy.turns_played)
-			self.assertEqual(self.s.current_player, copy.current_player)
+		gs.do_move((5,5))
+		gs.do_move((5,6))
 
-	def test_sym_boards(self):
-		# construct by hand the 8 boards we expect to see
-		expectations = [GameState() for i in range(8)]
+		self.assertTrue(gs.is_legal((2,1)))
 
-		descriptions = ["noop", "rot90", "rot180", "rot270", "mirror LR", "mirror UD", "mirror \\", "mirror /"]
+	def test_snapback_is_not_ko(self):
+		gs = GameState(size=5)
+		# B o W B .
+		# W W B . .
+		# . . . . .
+		# . . . . .
+		# . . . . .
+		# here, imagine black plays at 'o' capturing
+		# the white stone at (2,0). White may play
+		# again at (2,0) to capture the black stones
+		# at (0,0), (1,0). this is 'snapback' not 'ko'
+		# since it doesn't return the game to a
+		# previous position
+		B = [(0,0),(2,1),(3,0)]
+		W = [(0,1),(1,1),(2,0)]
+		for (b,w) in zip(B,W):
+			gs.do_move(b)
+			gs.do_move(w)
+		# do the capture of the single white stone
+		gs.do_move((1,0))
+		# there should be no ko
+		self.assertIsNone(gs.ko)
+		self.assertTrue(gs.is_legal((2,0)))
+		# now play the snapback
+		gs.do_move((2,0))
+		# check that the numbers worked out
+		self.assertEqual(gs.num_black_prisoners, 2)
+		self.assertEqual(gs.num_white_prisoners, 1)
 
-		# copy of self.s
-		expectations[0].do_move((4,5))
-		expectations[0].do_move((5,5))
-		expectations[0].do_move((5,6))
+class TestEye(unittest.TestCase):
 
-		# rotate 90 CCW
-		expectations[1].do_move((13,4))
-		expectations[1].do_move((13,5))
-		expectations[1].do_move((12,5))
+	def test_simple_eye(self):
 
-		# rotate 180
-		expectations[2].do_move((14,13))
-		expectations[2].do_move((13,13))
-		expectations[2].do_move((13,12))
+		# create a black eye in top left (1,1), white in bottom right (5,5)
 
-		# rotate CCW 270
-		expectations[3].do_move((5,14))
-		expectations[3].do_move((5,13))
-		expectations[3].do_move((6,13))
+		gs = GameState(size=7)
+		gs.do_move((1,0)) # B
+		gs.do_move((5,4)) # W
+		gs.do_move((2,1)) # B
+		gs.do_move((6,5)) # W
+		gs.do_move((1,2)) # B
+		gs.do_move((5,6)) # W
+		gs.do_move((0,1)) # B
+		gs.do_move((4,5)) # W
 
-		# mirror left-right
-		expectations[4].do_move((4,13))
-		expectations[4].do_move((5,13))
-		expectations[4].do_move((5,12))
+		# test black eye top left
+		self.assertTrue(gs.is_eye((1,1), go.BLACK))
+		self.assertFalse(gs.is_eye((1,1), go.WHITE))
 
-		# mirror up-down
-		expectations[5].do_move((14,5))
-		expectations[5].do_move((13,5))
-		expectations[5].do_move((13,6))
+		# test white eye bottom right
+		self.assertTrue(gs.is_eye((5,5), go.WHITE))
+		self.assertFalse(gs.is_eye((5,5), go.BLACK))
 
-		# mirror \ diagonal
-		expectations[6].do_move((5,4))
-		expectations[6].do_move((5,5))
-		expectations[6].do_move((6,5))
+		# test no eye in other random positions
+		self.assertFalse(gs.is_eye((1,0), go.BLACK))
+		self.assertFalse(gs.is_eye((1,0), go.WHITE))
+		self.assertFalse(gs.is_eye((2,2), go.BLACK))
+		self.assertFalse(gs.is_eye((2,2), go.WHITE))
 
-		# mirror / diagonal (equivalently: rotate 90 CCW then flip LR)
-		expectations[7].do_move((13,14))
-		expectations[7].do_move((13,13))
-		expectations[7].do_move((12,13))
-
-		for i in range(8):
-			self.assertTrue(np.array_equal(expectations[i].board, self.syms[i].board), descriptions[i])
+if __name__ == '__main__':
+	unittest.main()
